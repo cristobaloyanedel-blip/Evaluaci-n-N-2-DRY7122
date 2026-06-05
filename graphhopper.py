@@ -1,0 +1,79 @@
+import requests
+
+API_KEY = "77152181-0b8e-4528-89e9-7becc59bb9c8"
+
+CITIES = {
+    "santiago": (-33.4489, -70.6693),
+    "ovalle":   (-30.6034, -71.1993),
+    "valparaiso": (-33.0472, -71.6127),
+}
+
+def get_coords(city_name):
+    name = city_name.strip().lower()
+    if name in CITIES:
+        return CITIES[name]
+    url = "https://graphhopper.com/api/1/geocode"
+    params = {"q": city_name, "key": API_KEY, "limit": 1}
+    r = requests.get(url, params=params)
+    hits = r.json().get("hits", [])
+    if not hits:
+        return None
+    p = hits[0]["point"]
+    return p["lat"], p["lng"]
+
+def get_route(origin, destination):
+    url = "https://graphhopper.com/api/1/route"
+    params = {
+        "point": [f"{origin[0]},{origin[1]}",
+                  f"{destination[0]},{destination[1]}"],
+        "vehicle": "car",
+        "locale": "es",
+        "key": API_KEY,
+        "instructions": "true"
+    }
+    r = requests.get(url, params=params)
+    return r.json()
+
+def format_time(ms):
+    total_s = ms // 1000
+    h = total_s // 3600
+    m = (total_s % 3600) // 60
+    s = total_s % 60
+    return h, m, s
+
+while True:
+    city_from = input("Ciudad de Origen (q para salir): ")
+    if city_from.lower() == "q":
+        print("Saliendo del programa.")
+        break
+    city_to = input("Ciudad de Destino: ")
+    if city_to.lower() == "q":
+        print("Saliendo del programa.")
+        break
+    coords_from = get_coords(city_from)
+    coords_to   = get_coords(city_to)
+    if not coords_from or not coords_to:
+        print("No se encontraron coordenadas.")
+        continue
+    data = get_route(coords_from, coords_to)
+    if "paths" not in data or not data["paths"]:
+        print("No se encontro ruta.")
+        continue
+    path = data["paths"][0]
+    dist_km   = path["distance"] / 1000
+    h, m, s   = format_time(path["time"])
+    litros    = dist_km * 0.08
+    print(f"\n--- Ruta: {city_from.title()} -> {city_to.title()} ---")
+    print(f"Distancia   : {dist_km:.2f} km")
+    print(f"Duracion    : {h:.0f}h {m:.0f}m {s:.0f}s")
+    print(f"Combustible : {litros:.2f} litros")
+    print("\nNarrativa del viaje:")
+    
+    for step in path.get("instructions", []):
+        texto = step['text']
+
+        texto = texto.replace("and drive toward", "y conduce hacia")
+        texto = texto.replace("and take", "y toma")
+        texto = texto.replace("toward", "hacia")
+
+        print(f"  * {texto}")
